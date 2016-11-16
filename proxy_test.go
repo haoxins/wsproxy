@@ -1,5 +1,6 @@
 package wsproxy
 
+import . "github.com/pkg4go/assert"
 import "golang.org/x/net/websocket"
 import "net/http/httptest"
 import "io/ioutil"
@@ -18,6 +19,8 @@ func echoHandler(ws *websocket.Conn) {
 }
 
 func TestWSProxy(t *testing.T) {
+	a := A{t}
+
 	go func() {
 		time.Sleep(3 * time.Second)
 		panic("hi")
@@ -34,26 +37,22 @@ func TestWSProxy(t *testing.T) {
 	backend := httptest.NewServer(queryAssert)
 	defer backend.Close()
 	backendURL, err := url.Parse(backend.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	a.Nil(err)
+
 	backendURL.Path = "/dst"
 	proxy := httptest.NewServer(NewProxy(backendURL))
 	defer proxy.Close()
 
 	for _, data := range []string{"hello,", "world", "!"} {
 		res, err := sendWSRequest(proxy.URL+"/ws?foo=bar", data, t)
-		if err != nil {
-			t.Error(err)
-			continue
-		}
-		if res != data {
-			t.Errorf("expected '%s', got '%s'", data, res)
-		}
+		a.Nil(err)
+		a.Equal(res, data)
 	}
 }
 
 func TestProxy(t *testing.T) {
+	a := A{t}
+
 	h := http.NewServeMux()
 	h.Handle("/ws", websocket.Handler(func(ws *websocket.Conn) {
 		ws.Write([]byte("ws success"))
@@ -95,9 +94,7 @@ func TestProxy(t *testing.T) {
 	}()
 	select {
 	case err := <-errc:
-		if err != nil {
-			t.Error(err)
-		}
+		a.Nil(err)
 	case <-time.After(4 * time.Second):
 		t.Error("http request timedout")
 	}
@@ -118,9 +115,7 @@ func TestProxy(t *testing.T) {
 	t.Logf("waiting for websocket response")
 	select {
 	case err := <-errc:
-		if err != nil {
-			t.Error(err)
-		}
+		a.Nil(err)
 		return
 	case <-time.After(4 * time.Second):
 		t.Error("websocket request timedout")
@@ -129,6 +124,8 @@ func TestProxy(t *testing.T) {
 }
 
 func TestHttpReq(t *testing.T) {
+	a := A{t}
+
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		t.Error("non-websocket request was made through proxy")
 	}
@@ -136,10 +133,7 @@ func TestHttpReq(t *testing.T) {
 	defer backend.Close()
 
 	u, e := url.Parse(backend.URL + "/")
-	if e != nil {
-		t.Error(e)
-		return
-	}
+	a.Nil(e)
 
 	u.Scheme = "ws"
 
@@ -149,20 +143,17 @@ func TestHttpReq(t *testing.T) {
 	defer proxyServer.Close()
 
 	_, e = http.Get(proxyServer.URL + "/")
-	if e != nil {
-		t.Error(e)
-		return
-	}
+	a.Nil(e)
 }
 
 func sendWSRequest(urlstr, data string, t *testing.T) (string, error) {
-	if data == "" {
-		return "", fmt.Errorf("can't send empty data")
-	}
+	a := A{t}
+
+	a.NotEqual(data, "", "can't send empty data")
+
 	u, e := url.Parse(urlstr)
-	if e != nil {
-		return "", e
-	}
+	a.Nil(e)
+
 	u.Scheme = "ws"
 	origin := "http://localhost/"
 	errc := make(chan error)
